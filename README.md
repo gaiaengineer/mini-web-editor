@@ -1,33 +1,36 @@
 # Mini Web Editor
 
-A small, fast book editor: authors write in the browser and download a valid EPUB, without installing anything.
+A book editor that runs in the browser. Open a Word manuscript or start a blank book, turn it into a clean, well-structured book, preview it on phone and tablet screens, and export it as a Word file. Nothing is installed and nothing leaves the browser: books are saved on the device, and every file is built on the page itself.
 
-It runs entirely in the browser. There is no backend yet: drafts live on the author's device, and the EPUB is assembled on the page itself. Connecting a server later means implementing one small interface ([see below](#connecting-the-ruby-backend)).
+![The editor with the Contents panel, a chapter with its subtitle and a footnote, and the phone preview beside it](docs/screenshots/01-editor.png)
 
-![The editor with the Contents panel, a formatted chapter and an illustration](docs/screenshots/01-editor.png)
+**Try it:**
 
-**Try the output:** [`samples/the-rain-ledger.epub`](samples/the-rain-ledger.epub) is a tiny book exported by this editor, with a title, an author, a table of contents, formatting, an illustration and an embedded font. It passes [EPUBCheck](https://www.w3.org/publishing/epubcheck/) with 0 errors and 0 warnings.
+- [`samples/the-rain-ledger.docx`](samples/the-rain-ledger.docx) is a short Word manuscript with a title, a copyright line, chapters with subtitles, footnotes, a scene break and an illustration. Open it with **Open Word file**.
+- [`samples/the-rain-ledger.epub`](samples/the-rain-ledger.epub) is the book the editor built from it. It passes [EPUBCheck](https://www.w3.org/publishing/epubcheck/) 5.2.1 with 0 errors and 0 warnings.
 
 ## Contents
 
 - [Features](#features)
 - [Quick start](#quick-start)
 - [What it is built with](#what-it-is-built-with)
-- [What ProseMirror does](#what-prosemirror-does)
 - [How it works](#how-it-works)
   - [Overview](#overview)
   - [The document](#the-document)
-  - [The toolbar](#the-toolbar)
-  - [Pasting](#pasting)
-  - [Saving drafts](#saving-drafts)
+  - [Opening a Word file](#opening-a-word-file)
+  - [Suggestions](#suggestions)
+  - [Generated pages](#generated-pages)
+  - [Footnotes](#footnotes)
+  - [Spelling and grammar](#spelling-and-grammar)
+  - [The preview](#the-preview)
+  - [The EPUB](#the-epub)
+  - [The Word export](#the-word-export)
+  - [Saving](#saving)
   - [Images](#images)
-  - [Fonts](#fonts)
-  - [Themes](#themes)
-  - [The Contents panel](#the-contents-panel)
-  - [EPUB export](#epub-export)
+  - [Fonts and themes](#fonts-and-themes)
   - [Phones](#phones)
 - [Project structure](#project-structure)
-- [Connecting the Ruby backend](#connecting-the-ruby-backend)
+- [Connecting a backend](#connecting-a-backend)
 - [Extending the editor](#extending-the-editor)
 - [Testing](#testing)
 - [Known limits](#known-limits)
@@ -35,81 +38,121 @@ It runs entirely in the browser. There is no backend yet: drafts live on the aut
 
 ## Features
 
+### Books
+
+The start page lists every book saved in this browser, newest first. **New book** starts a blank one, and **Open Word file** turns a `.docx` file into a new book. Opening a file never changes an existing book.
+
+### Opening Word files
+
+The import keeps what a book needs and cleans up what it doesn't:
+
+- **Kept:** headings, bold, italic and underline, alignment, images, lists, footnotes and endnotes, and Word's Subtitle style.
+- **Cleaned up:** fonts, sizes and colours; tabs used as indents; blank lines used as spacing; page breaks.
+- **Moved to their own pages:** title lines, a by-line and copyright lines go to the Title page and Copyright forms. A typed table of contents is taken out, because the book makes its own.
+- **Kept as scene breaks:** occasional blank lines between paragraphs, as long as the manuscript has few of them.
+
+A notice at the top of the text says what was moved or couldn't be kept.
+
+![A freshly opened Word file: the notice about moved title and copyright lines, and the chapters in the Contents panel](docs/screenshots/02-import.png)
+
+### Suggestions
+
+Some things the import can't be sure of, so it asks. Each suggestion can be accepted or rejected on its own, or all at once:
+
+- **Chapter headings:** plain lines that read like chapters, such as `Chapter 3`, `IV` or `Prologue`.
+- **Chapter subtitles:** a short line, set apart by italics, bold or centring, right under a chapter heading.
+- **Alignment:** a long paragraph aligned differently from the rest of the book.
+
+Suggestions are saved with the book until they are reviewed, and they never reach the preview or an export.
+
 ### Formatting
 
-Bold, italic, underline; left, center and right alignment; H1, H2 and H3. Everything is available from the toolbar and from the keyboard.
+| Action           | Mac   | Windows / Linux |
+| ---------------- | ----- | --------------- |
+| Bold             | ⌘B    | Ctrl+B          |
+| Italic           | ⌘I    | Ctrl+I          |
+| Underline        | ⌘U    | Ctrl+U          |
+| Align left       | ⌘⇧L   | Ctrl+Shift+L    |
+| Align center     | ⌘⇧E   | Ctrl+Shift+E    |
+| Align right      | ⌘⇧R   | Ctrl+Shift+R    |
+| H1, H2, H3       | ⌘⌥1–3 | Ctrl+Alt+1–3    |
+| Chapter subtitle | ⌘⌥4   | Ctrl+Alt+4      |
+| Save draft       | ⌘S    | Ctrl+S          |
 
-| Action       | Mac   | Windows / Linux |
-| ------------ | ----- | --------------- |
-| Bold         | ⌘B    | Ctrl+B          |
-| Italic       | ⌘I    | Ctrl+I          |
-| Underline    | ⌘U    | Ctrl+U          |
-| Align left   | ⌘⇧L   | Ctrl+Shift+L    |
-| Align center | ⌘⇧E   | Ctrl+Shift+E    |
-| Align right  | ⌘⇧R   | Ctrl+Shift+R    |
-| H1, H2, H3   | ⌘⌥1–3 | Ctrl+Alt+1–3    |
-| Save draft   | ⌘S    | Ctrl+S          |
+The toolbar also adds scene dividers, footnotes and images.
 
-![Selected underlined text, with the toolbar showing the active formats](docs/screenshots/03-formatting.png)
+### Chapter subtitles
 
-### Phones
+A subtitle is another name for a chapter, as in *Chapter One* with the subtitle *The Keeper*. It is not a section of its own. Mark the line under a heading with **Sub**. The book shows the subtitle under its heading, and the contents and the Contents panel list the title only. A subtitle line with no heading above it is ordinary text in the book.
 
-Select text, then tap a button. The toolbar moves to the bottom edge, above the keyboard, because the phone's own copy and paste menu appears next to the selection. The selection stays in place after a tap, so several formats can be applied in a row.
+### Scene dividers
+
+**Add divider** (the three dots) puts a scene break at the cursor. Click a divider to select it, and press Delete to remove it. One style applies to the whole book, chosen in the settings: a line, `* * *` or `❦`.
+
+### Footnotes
+
+**Add footnote** (A¹) puts a numbered footnote at the cursor and opens a box for its note. Click a footnote's number to edit or delete it. Numbers follow the footnotes' order, so adding one renumbers the rest. Every note is listed after the text, and each number there leads back to its footnote. A footnote left empty is removed when the cursor moves away from it.
+
+![A footnote's box open under its number, with the Notes page in the phone preview](docs/screenshots/03-footnote.png)
+
+In the book, each footnote links to its note on a Notes page at the end, and the note's number links back.
+
+### Spelling and grammar
+
+English books get a red wavy underline under spelling and grammar mistakes as the author writes. Click one to see what's wrong, pick a fix, ignore it, or add the word to the book's dictionary. The checker is [Harper](https://github.com/automattic/harper), which runs in the browser, so no text is sent anywhere.
+
+![A misspelt word underlined, with its suggested fixes, Ignore and Add to dictionary](docs/screenshots/04-spelling.png)
+
+- **Dialect:** American, British, Canadian, Australian or Indian English, or off. It starts on the browser's region.
+- **Per book:** the dictionary (character names, invented words) and the ignored mistakes are saved with each book.
+- **English only:** a book whose text isn't English is never checked.
+- **Tuned for fiction:** rules that fiction breaks on purpose are off, such as quotes left open across paragraphs of dialogue, swearing, and "gonna". So are style opinions such as sentence length and the Oxford comma.
+- **One set of underlines:** while the check is on, the browser's own spell check is off.
+
+### Generated pages
+
+The book gets a title page, a copyright page and a table of contents, in that order, each starting on its own page. None of them is part of the text the author edits:
+
+- **Title page and Copyright** in the left panel open forms in place of the text. Lines the import recognised fill them in.
+- **The table of contents** is built from the headings and comes straight after the copyright page, before any of the book's text.
+
+![The Title page form, with the generated title page in the preview](docs/screenshots/05-title-page.png)
+
+### Preview
+
+**Preview** shows the book as a reader would see it, paged like a reading app, in a phone or tablet frame: iPhone, iPad, Samsung Galaxy A or Samsung Galaxy Tab. On a wide screen it sits beside the text and follows every edit.
 
 <p>
-  <img src="docs/screenshots/08-phone-formatting.png" width="300" alt="Phone layout with selected text and the toolbar at the bottom">
-  <img src="docs/screenshots/09-phone-contents.png" width="300" alt="Phone layout with the Contents panel open">
+  <img src="docs/screenshots/10-preview-title.png" width="19%" alt="Preview: title page">
+  <img src="docs/screenshots/11-preview-copyright.png" width="19%" alt="Preview: copyright page">
+  <img src="docs/screenshots/12-preview-contents.png" width="19%" alt="Preview: contents, with links to the chapters and the notes">
+  <img src="docs/screenshots/13-preview-chapter.png" width="19%" alt="Preview: Chapter One with its subtitle">
+  <img src="docs/screenshots/14-preview-notes.png" width="19%" alt="Preview: the Notes page">
 </p>
 
-### Illustrations
+### Export
 
-Add images with the toolbar button, by pasting, or by dragging them in. Select an image to align it, describe it for screen readers, or remove it.
+**Export .docx** in the bottom bar downloads the book as a Word file. It includes the generated pages, real Word footnotes, the headings as Word headings, and subtitles in Word's Subtitle style. Opening the exported file again brings back its headings, subtitles and footnotes.
 
-![A selected illustration with its description field and Remove button](docs/screenshots/02-illustration.png)
+**Check EPUB** builds the book's EPUB, so its output can be checked in a reading app or with EPUBCheck. It is there only while the app runs with `npm run dev`. Production builds leave the EPUB code out, and the build fails if it slips in (see [The EPUB](#the-epub)).
 
-### Table of contents
+### Settings
 
-Any line marked as a heading appears in the Contents panel within about a quarter of a second. An H1 is a chapter; H2 and H3 nest beneath it. Click an entry to jump there. The panel follows the same rules as the EPUB, so it shows what readers will get.
+The cog in the top right holds the book font, the scene divider style, the spelling dialect and the theme. The font, divider and dialect belong to the book. The theme belongs to the browser.
 
-### Fonts
-
-The author picks one font for the whole book. All five are free, cover Latin and Cyrillic, and are embedded in the EPUB.
-
-| Serif    | Sans-serif |
-| -------- | ---------- |
-| Literata | Inter      |
-| Lora     | Open Sans  |
-| PT Serif |            |
-
-<p>
-  <img src="docs/screenshots/06-font-inter.png" width="49%" alt="The book set in Inter">
-  <img src="docs/screenshots/07-font-pt-serif.png" width="49%" alt="The book set in PT Serif">
-</p>
+![The settings menu](docs/screenshots/08-settings.png)
 
 ### Themes
 
-Light, Dark and Sepia. The editor follows the device until the author chooses. All three use a teal accent, adjusted for each theme so that it stays readable.
+Light, Dark and Sepia. The editor follows the device until the author chooses.
 
-<p>
-  <img src="docs/screenshots/04-theme-dark.png" width="49%" alt="Dark theme">
-  <img src="docs/screenshots/05-theme-sepia.png" width="49%" alt="Sepia theme">
-</p>
-
-### EPUB export
-
-One click produces a book with a title page, a Contents page, chapters, images, the chosen font, and title and author metadata. These pages come from the sample book:
-
-<p>
-  <img src="docs/screenshots/10-epub-title.png" width="24%" alt="EPUB title page">
-  <img src="docs/screenshots/11-epub-contents.png" width="24%" alt="EPUB Contents page">
-  <img src="docs/screenshots/12-epub-chapter-one.png" width="24%" alt="EPUB first chapter with an illustration">
-  <img src="docs/screenshots/13-epub-chapter-two.png" width="24%" alt="EPUB second chapter">
-</p>
+![The editor in the dark theme](docs/screenshots/06-theme-dark.png)
 
 ### Also included
 
 - **Paste** from Word, Google Docs, Pages or the web, keeping the formatting.
-- **Drafts** save automatically every 2 seconds, and with Save draft or ⌘S.
+- **Status bar** along the bottom: whether the book is saved, its word and character counts (notes included), and **Export .docx**.
+- **Contents panel** on the left: Title page, Copyright, Book text, and every chapter and section. Click one to go there.
 
 ## Quick start
 
@@ -122,61 +165,33 @@ npm run dev
 
 Open <http://localhost:3000>.
 
-| Command         | What it does                         |
-| --------------- | ------------------------------------ |
-| `npm run dev`   | Starts the development server        |
-| `npm run build` | Creates a production build           |
-| `npm start`     | Serves the production build          |
-| `npm test`      | Runs the unit tests                  |
-| `npm run lint`  | Runs ESLint                          |
+| Command         | What it does                                                  |
+| --------------- | ------------------------------------------------------------- |
+| `npm run dev`   | Starts the development server, with **Check EPUB**            |
+| `npm run build` | Creates a production build, then checks that it has no EPUB code |
+| `npm start`     | Serves the production build                                   |
+| `npm test`      | Runs the unit tests                                           |
+| `npm run lint`  | Runs ESLint                                                   |
+
+To see how the import handles a folder of Word files, run `npx tsx scripts/import-report.ts <folder>`. It prints counts only, such as headings, suggestions and notices per file, and never the text.
 
 ## What it is built with
 
-| Layer            | Technology                                              | Why                                                                     |
-| ---------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| App framework    | [Next.js 16](https://nextjs.org), [React 19](https://react.dev) | Fullstack React, with the editor running in the browser                  |
-| Editor engine    | [ProseMirror](https://prosemirror.net)                  | Structured documents; handles the hard parts of browser text editing    |
-| Editor framework | [Tiptap 3](https://tiptap.dev)                          | Ready-made extensions and React bindings on top of ProseMirror          |
-| ZIP              | [fflate](https://github.com/101arrowz/fflate)           | Tiny and fast; an EPUB is a ZIP file                                    |
-| Browser storage  | [idb-keyval](https://github.com/jakearchibald/idb-keyval) | A very small wrapper around IndexedDB                                   |
-| Fonts            | [Fontsource](https://fontsource.org)                    | Self-hosted font files, available to the EPUB exporter                  |
-| Language         | TypeScript                                              |                                                                         |
-| Tests            | [Vitest](https://vitest.dev), [jsdom](https://github.com/jsdom/jsdom) | Unit tests                                                              |
+| Layer            | Technology                                                       | Why                                                              |
+| ---------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| App framework    | [Next.js 16](https://nextjs.org), [React 19](https://react.dev)  | The editor runs in the browser; pages stay static                |
+| Editor engine    | [ProseMirror](https://prosemirror.net)                           | Structured documents; handles the hard parts of browser editing  |
+| Editor framework | [Tiptap 3](https://tiptap.dev)                                   | Ready-made extensions and React bindings on top of ProseMirror   |
+| Word import      | [mammoth](https://github.com/mwilliamson/mammoth.js)             | Reads `.docx` into HTML, keeping meaning rather than looks       |
+| Word export      | [docx](https://docx.js.org)                                      | Writes `.docx`, including footnotes and a table of contents      |
+| Spelling         | [Harper](https://github.com/automattic/harper) (`harper.js`)     | Grammar and spelling checker that runs in the browser            |
+| ZIP              | [fflate](https://github.com/101arrowz/fflate)                    | Small and fast; an EPUB is a ZIP file                            |
+| Browser storage  | [idb-keyval](https://github.com/jakearchibald/idb-keyval)        | A very small wrapper around IndexedDB                            |
+| Fonts            | [Fontsource](https://fontsource.org)                             | Self-hosted font files, available to the EPUB builder            |
+| Language         | TypeScript                                                       |                                                                  |
+| Tests            | [Vitest](https://vitest.dev), [jsdom](https://github.com/jsdom/jsdom) | Unit tests                                                  |
 
-**So, is it ProseMirror?** Yes. ProseMirror is the engine, and Tiptap is the layer we use to work with it. Our code talks mostly to Tiptap, and Tiptap drives ProseMirror. Where we need more control, such as pasting and image handling, we use ProseMirror's own `Plugin`, `Slice` and `Transaction` directly.
-
-**Size:** about 318 KB of gzipped JavaScript in total, including React and Next.js. The ZIP code is about 13 KB and downloads only when the author exports. Each font downloads only when it is selected.
-
-There is no CSS framework: styles are plain CSS in two files.
-
-## What ProseMirror does
-
-A plain `contenteditable` element lets the browser edit HTML directly, and each browser produces different HTML. That is unreliable, and it is hard to turn into a book.
-
-ProseMirror keeps the real document in JavaScript, as a tree that follows a strict schema. The DOM is only a view of it.
-
-```mermaid
-flowchart LR
-    A[Keystroke or button] --> B[Transaction]
-    B --> C[New editor state]
-    C --> D[DOM update]
-    C --> E[update event]
-    E --> F[Autosave]
-    E --> G[Contents panel]
-```
-
-- **Schema:** what a document may contain. If something isn't in the schema, it can't get into the document.
-- **State:** the document, the selection and the plugins, as an immutable value.
-- **Transaction:** a description of a change. Applying it produces a new state. Undo is built on this.
-- **View:** renders the state to the DOM and turns browser events into transactions.
-
-Because the content is a clean tree instead of arbitrary HTML, the EPUB exporter can walk it and write strict XHTML.
-
-Tiptap wraps this model in extensions and a chainable API:
-
-```ts
-editor.chain().focus().toggleBold().run();
-```
+There is no CSS framework: styles are plain CSS.
 
 ## How it works
 
@@ -185,39 +200,46 @@ editor.chain().focus().toggleBold().run();
 ```mermaid
 flowchart TB
     subgraph Browser
-        UI[BookEditor<br/>Toolbar, Contents, ThemePicker]
+        List[Book list]
+        UI[BookEditor<br/>Toolbar, Contents, forms, status bar]
         Engine[Tiptap and ProseMirror]
+        Import[Word import]
+        Check[Spelling check<br/>Harper in a web worker]
         Store[DraftStore]
         IDB[(IndexedDB)]
+        Preview[Preview]
         Epub[EPUB builder]
+        Docx[Word export]
     end
-    Fonts[public/fonts]
-    File[book.epub]
-
+    File[.docx file] --> Import
+    Import -- document JSON --> Store
+    List <--> Store
     UI <--> Engine
+    Engine <--> Check
     Engine -- document JSON --> Store
     Store <--> IDB
-    Engine -- document JSON --> Epub
-    Store -- image files --> Epub
-    Fonts -- font files --> Epub
-    Epub --> File
+    Store --> Preview
+    Store --> Epub
+    Store --> Docx
+    Docx --> Out[book.docx]
+    Epub --> EOut[book.epub]
 ```
 
-The editor depends on the DOM and IndexedDB, so it never renders on the server. `EditorLoader` loads it with `next/dynamic` and `ssr: false`, and the Next.js page itself stays static.
-
-`BookEditor` first loads the draft, then mounts the workspace with that content. If a draft can't be read, it shows an error and a retry button rather than a blank editor, because the next autosave would overwrite the draft.
+The editor depends on the DOM and IndexedDB, so it never renders on the server. `EditorLoader` loads it with `next/dynamic` and `ssr: false`.
 
 ### The document
 
-The schema is in [`src/lib/schema.ts`](src/lib/schema.ts). It uses Tiptap's StarterKit limited to three heading levels, the TextAlign extension and our `bookImage` node.
+The schema is in [`src/lib/schema.ts`](src/lib/schema.ts): Tiptap's StarterKit limited to three heading levels, text alignment, and the book's own nodes.
 
-| Kind   | Contents                                                                           |
-| ------ | ---------------------------------------------------------------------------------- |
-| Blocks | paragraph, heading (1–3), bullet list, ordered list, blockquote, horizontal rule, image |
-| Inline | text, hard break                                                                   |
-| Marks  | bold, italic, underline, strike, link                                              |
+| Kind   | Contents                                                                                       |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Blocks | paragraph, heading (1–3), subtitle, bullet list, ordered list, blockquote, scene divider, image |
+| Inline | text, hard break, footnote                                                                     |
+| Marks  | bold, italic, underline, strike, link                                                          |
 
-Lists, quotes, rules, links and strikethrough have no toolbar buttons. They exist so that pasted text keeps them.
+- **Subtitle** ([`subtitle.ts`](src/lib/subtitle.ts)) belongs to the heading right above it.
+- **Footnote** ([`footnote.ts`](src/lib/footnote.ts)) is a marker that holds its own note: text with emphasis and line breaks. It has no number of its own. The number comes from its place in the book.
+- **Suggestions** are hidden attributes on paragraphs and headings, so they move with edits and are saved with the draft.
 
 A saved document is plain JSON:
 
@@ -225,119 +247,71 @@ A saved document is plain JSON:
 {
   "type": "doc",
   "content": [
-    { "type": "heading", "attrs": { "level": 1, "textAlign": null },
-      "content": [{ "type": "text", "text": "Chapter One" }] },
-    { "type": "paragraph", "attrs": { "textAlign": "center" },
-      "content": [{ "type": "text", "text": "ledger", "marks": [{ "type": "bold" }] }] }
+    { "type": "heading", "attrs": { "level": 1 }, "content": [{ "type": "text", "text": "Chapter One" }] },
+    { "type": "subtitle", "content": [{ "type": "text", "text": "The Keeper" }] },
+    { "type": "paragraph", "content": [
+      { "type": "text", "text": "It smelled of salt and lamp oil." },
+      { "type": "footnote", "attrs": { "note": [{ "type": "text", "text": "The lamp burned paraffin." }] } }
+    ] }
   ]
 }
 ```
 
-### The toolbar
+### Opening a Word file
 
-[`Toolbar.tsx`](src/components/editor/Toolbar.tsx) is a list of actions, each with a label, a shortcut, an icon, an `isActive` check and a command. The shortcuts themselves come from the Tiptap extensions.
-
-Two details matter:
-
-- Each button cancels `mousedown`, which keeps the text selection. This is what makes select-then-tap work on phones.
-- Button states use `useEditorState` with a selector, so the toolbar re-renders only when a state changes, not on every keystroke.
-
-### Pasting
-
-Clipboard HTML from other apps often keeps formatting in places the editor doesn't look. [`src/lib/paste.ts`](src/lib/paste.ts) fixes that before ProseMirror parses it.
-
-```mermaid
-flowchart TB
-    A[Clipboard HTML] --> B[Inline style sheets]
-    B --> C[Normalize alignment]
-    C --> D[Normalize headings]
-    D --> E[ProseMirror parses with the schema]
-    E --> F[Keep alignment of a replaced line]
-    F --> G[Copy pasted images into storage]
-```
-
-1. **Style sheets:** Word, Pages and TextEdit keep bold, italics and alignment in a `<style>` block, so those rules are copied onto the elements.
-2. **Alignment:** the old `align` attribute, `<center>`, and alignment on wrapper elements all move to paragraphs and headings.
-3. **Headings:** H4 to H6 become H3. Word's Title and Subtitle styles become H1 and H2.
-4. **Schema:** whatever the schema doesn't know, such as fonts, sizes and colors, is dropped. That is deliberate: typography belongs to the book's font and the reader's settings.
-5. **Alignment of a replaced line:** ProseMirror normally merges pasted text into the current line, which would lose the pasted alignment. When a paste replaces a whole line, it keeps its own.
-
-### Saving drafts
-
-[`useAutosave.ts`](src/components/editor/useAutosave.ts) tracks whether there are unsaved changes.
-
-- **While typing:** saves every 2 seconds. The timer isn't reset by keystrokes, so an author who never pauses still gets saved.
-- **Manually:** the Save draft button and ⌘S.
-- **Leaving:** saves when the tab is hidden, because phones can close a hidden tab without warning, and warns about unsaved changes on close.
-- **Failures:** the status shows an error and the change stays marked as unsaved.
-
-Drafts use IndexedDB because a long book can outgrow the 5 MB limit of `localStorage`. The screen says "Saved on this device" because that is exactly what is true today.
-
-### Images
-
-Image files don't go inside the document. The document stores an id, and the file sits in a separate IndexedDB database. In our test a draft with two images was 675 bytes, so autosave stays fast however many images a book has.
-
-[`src/lib/images.ts`](src/lib/images.ts) prepares each image before storing it:
-
-- Scales it to at most 1600 px on the longest side.
-- Saves it as JPEG or PNG, which every reader supports. WebP is converted, for example.
-- Re-encodes it, which removes EXIF data. A phone photo's GPS location must not end up in a published book.
-- Keeps a GIF as it is when it is already small enough, so that it stays animated.
-
-[`useImages.ts`](src/components/editor/useImages.ts) handles the ways images arrive:
-
-| Source                                   | What happens                                                                  |
-| ---------------------------------------- | ----------------------------------------------------------------------------- |
-| Toolbar button, drag and drop            | The files are processed and inserted                                          |
-| Pasted screenshot                        | Treated as a file                                                             |
-| Paste with both text and an image file   | The text wins: Word offers a picture of the selection alongside its text      |
-| `<img>` in pasted HTML                   | Fetched and copied into storage, so the book doesn't depend on another server |
-| An image the browser can't fetch         | Removed, and the author is told to add it with the button                     |
-
-After inserting, the caret moves past the image. If the image stayed selected, the next keystroke would replace it.
-
-### Fonts
-
-The font is stored with the draft, as a book setting. [`scripts/copy-fonts.mjs`](scripts/copy-fonts.mjs) copies four styles of each font (regular, italic, bold, bold italic) in Latin and Cyrillic from Fontsource into `public/fonts`. They are served as plain files because the exporter needs the raw bytes.
-
-The editor adds `@font-face` rules for the selected font only. The browser downloads a file when text actually needs it, using `unicode-range`.
-
-### Themes
-
-[`src/lib/theme.ts`](src/lib/theme.ts) defines the themes, and CSS variables in [`globals.css`](src/app/globals.css) define the colors.
-
-The theme is a preference of the browser, not of the book, so it goes in `localStorage` and never reaches the EPUB. A small inline script in `layout.tsx` applies it before the first paint, so a dark page doesn't flash white.
-
-### The Contents panel
-
-[`Contents.tsx`](src/components/editor/Contents.tsx) lists the top-level, non-empty headings. The list is refreshed at most every 250 ms, because reading it means walking the whole document.
-
-- **From 1100 px wide:** it is a sidebar, open by default.
-- **Narrower:** it is a drawer that covers the page, closed by default. Tap outside or press Esc to close it.
-
-Clicking an entry moves the selection and scrolls to the heading. On a touch device the editor isn't focused, because that would open the keyboard over the chapter just opened. The highlight follows the caret, not the scroll position.
-
-### EPUB export
-
-Everything is in [`src/lib/epub/`](src/lib/epub). Export runs in the browser, and the code is loaded only when needed.
+[`src/import/`](src/import) turns a `.docx` file into that JSON, in order:
 
 ```mermaid
 flowchart LR
-    A[Document JSON] --> B[Group into chapters]
-    B --> C[Write XHTML]
-    B --> D[Build contents]
-    C --> E[ZIP]
-    D --> E
-    F[Images] --> E
-    G[Font files] --> E
-    E --> H[.epub]
+    A[.docx] --> B[mammoth: HTML]
+    B --> C[Clean up]
+    C --> D[Title page lines]
+    D --> E[Typed contents]
+    E --> F[Copyright lines]
+    F --> G[Suggestions]
+    G --> H[Document JSON]
 ```
 
-**Writing XHTML:** Tiptap's HTML output isn't valid XML, so [`serialize.ts`](src/lib/epub/serialize.ts) writes pages directly from the JSON. It escapes text, removes characters that are illegal in XML (Word can paste some), and drops unsafe or invalid links.
+1. **[`docx.ts`](src/import/docx.ts):** mammoth reads the file with a style map that keeps headings, the Title and Subtitle styles and alignment. Images are saved as they arrive.
+2. **[`cleanup.ts`](src/import/cleanup.ts):** drops tab indents and page breaks, decides whether blank lines are spacing or scene breaks, and turns footnotes and endnotes into footnote nodes holding their notes.
+3. **[`titlePage.ts`](src/import/titlePage.ts), [`contents.ts`](src/import/contents.ts), [`copyright.ts`](src/import/copyright.ts):** move title and copyright lines to their pages and take out a typed table of contents. Each acts only on clear evidence, because the rule is that the import doesn't change the author's words.
+4. **[`suggest.ts`](src/import/suggest.ts):** marks likely chapter headings, subtitles and alignment fixes for the author to review.
 
-**Chapters:** [`chapters.ts`](src/lib/epub/chapters.ts) starts a new file at each H1. If a book has no H1, it uses the highest heading level present, so a book that uses H2 for chapters isn't one huge file. Text before the first heading gets its own file, listed under the book's title.
+Blank lines become scene breaks only when they are rare: up to five in a short work, or one per 1,000 words in a long one. More than that means the manuscript uses blank lines for spacing, as plays often do.
 
-**Inside the file**, using the sample book:
+### Suggestions
+
+[`suggestions.ts`](src/components/editor/suggestions.ts) draws each suggestion with Accept and Reject buttons, and [`SuggestionReview.tsx`](src/components/editor/SuggestionReview.tsx) offers Accept all and Reject all per kind. Accepting changes the line in one transaction, so a single undo brings it back.
+
+### Generated pages
+
+The title, subtitle, author and copyright details are fields of the draft, edited in [`PageForms.tsx`](src/components/editor/PageForms.tsx). The copyright page's lines are built in [`bookPages.ts`](src/lib/bookPages.ts). The table of contents is built from the headings each time the book is previewed or exported, so it can't go out of date.
+
+### Footnotes
+
+In the editor, [`Footnotes.tsx`](src/components/editor/Footnotes.tsx) shows the selected footnote's box and the list of notes after the text. The box is a small Tiptap editor of its own, limited to one paragraph. The numbers are a CSS counter, so they are always in order.
+
+When the book is built, [`serialize.ts`](src/lib/epub/serialize.ts) numbers the footnotes through the whole book. Each marker links to `notes.xhtml#note-N`, and each note links back to the chapter it came from.
+
+### Spelling and grammar
+
+[`grammarCheck.ts`](src/components/editor/grammarCheck.ts) checks each line on its own, in the background, and remembers the result by the line's text:
+
+- **After the first pass,** only lines that change are checked again, about 600 ms after typing pauses.
+- **A word being typed** loses its underline until it is checked again.
+- **Changing the dialect, ignoring a mistake or adding a word** rechecks only the lines it affects. A check still running with the old settings is discarded.
+
+[`harper.ts`](src/lib/grammar/harper.ts) loads Harper only when a book is checked. Harper is a WebAssembly file of about 8 MB compressed, which the browser caches after the first time, and it runs in a web worker so typing never waits on it. A failed load is retried on the next check.
+
+### The preview
+
+[`preview.ts`](src/lib/epub/preview.ts) renders the EPUB's own chapters and stylesheet into a sandboxed frame inside the device. Pages are CSS columns one screen wide, and the editor turns them by scrolling the frame. An edit swaps the frame's content without reloading it, so the page doesn't flash.
+
+Firefox ignores CSS column breaks, and Safari doesn't always honour them. So after layout, `fillPageEnds` checks where each chapter and generated page starts. If one starts partway down a page, it fills the rest of that page with empty space. In Chrome the breaks already work, and nothing is added.
+
+### The EPUB
+
+Everything is in [`src/lib/epub/`](src/lib/epub), and runs in the browser.
 
 ```text
 the-rain-ledger.epub
@@ -345,88 +319,93 @@ the-rain-ledger.epub
 ├── META-INF/container.xml    points to content.opf
 └── EPUB/
     ├── content.opf           metadata, file list, reading order
-    ├── nav.xhtml             contents: EPUB 3 menu and the visible page
-    ├── toc.ncx               contents for older EPUB 2 devices
+    ├── nav.xhtml             the contents page and the reading app's menu
+    ├── toc.ncx               the menu for older e-readers
     ├── book.css              fonts and formatting
     ├── title.xhtml           title page
-    ├── chapter-001.xhtml
-    ├── chapter-002.xhtml
+    ├── copyright.xhtml       copyright page, when there is one
+    ├── chapter-001.xhtml     one file per chapter
+    ├── notes.xhtml           the notes, when there are footnotes
     ├── fonts/*.woff2
     └── images/*.png
 ```
 
-**Table of contents:** it reaches the reader in three ways, all built from the same headings:
+- **Chapters:** [`chapters.ts`](src/lib/epub/chapters.ts) starts a new file at each top-level heading. Text before the first heading gets its own file.
+- **Headings with subtitles** are written as one `<hgroup>`, with the subtitle marked `role="doc-subtitle"`.
+- **Scene dividers** are an `<hr/>` or a centred line, depending on the book's style.
+- **Valid XHTML:** Tiptap's HTML output isn't valid XML, so [`serialize.ts`](src/lib/epub/serialize.ts) writes pages directly from the JSON. It escapes text, removes characters that are illegal in XML, and drops unsafe links.
 
-| Form                 | File        | Where it shows up                                       |
-| -------------------- | ----------- | ------------------------------------------------------- |
-| Contents page        | `nav.xhtml` | In the book, after the title page, with working links   |
-| EPUB 3 navigation    | `nav.xhtml` | The contents menu of modern reading apps                |
-| NCX                  | `toc.ncx`   | The contents menu of older e-readers                    |
+The EPUB code reaches the app only in development. `next.config.ts` swaps [`TeamEpubCheck.tsx`](src/components/editor/TeamEpubCheck.tsx) for an empty component in production builds, and [`scripts/check-no-epub.mjs`](scripts/check-no-epub.mjs) fails the build if EPUB code turns up in the published files anyway. The preview still uses the same chapter builder.
 
-The visible page is left out when there is only one entry.
+### The Word export
 
-**Metadata:** written to `content.opf`.
+[`src/lib/docx/`](src/lib/docx) writes the book with the `docx` library. It writes the title and copyright pages, a table of contents with its entries already filled in, the headings as Word headings, subtitles in the Subtitle style, footnotes as Word footnotes, and images scaled to the page. The export is loaded only when it is used.
 
-| Field                | Source                                                         |
-| -------------------- | -------------------------------------------------------------- |
-| `dc:title`           | The Book title field, or `Untitled` if it is blank             |
-| `dc:creator`         | The Author field, tagged with the `aut` role; left out if blank |
-| `dc:language`        | `ru` if the text is mostly Cyrillic, otherwise the browser's language |
-| `dc:identifier`      | A permanent id created with the draft                          |
-| `dcterms:modified`   | The time of export                                             |
+### Saving
 
-Exporting without a title or an author shows a notice. The title and author also go into the title page and `toc.ncx`.
+[`useAutosave.ts`](src/components/editor/useAutosave.ts) saves every 2 seconds while there are changes, with **Save draft** or ⌘S, when the tab is hidden, and before leaving a book. A failed save shows an error and keeps the change marked as unsaved. Drafts use IndexedDB, because a long book can outgrow `localStorage`. The status says "Saved on this device" because that is exactly what is true.
 
-**Styling:** `book.css` sets margins and alignment, and leaves sizes to the reader's settings. Fonts are embedded only for the character sets a book uses, which adds about 90 KB for Latin and 140 KB with Cyrillic.
+### Images
+
+Image files are kept out of the document. The document stores an id, and the file sits in a separate IndexedDB database, so autosave stays small however many images a book has. [`images.ts`](src/lib/images.ts) scales each image to at most 1600 px, saves it as JPEG or PNG, and re-encodes it, which removes EXIF data such as a phone photo's location.
+
+### Fonts and themes
+
+The author picks one font for the whole book: Literata, Lora or PT Serif, or Inter or Open Sans. All cover Latin and Cyrillic, and the EPUB embeds only the character sets the book uses. [`scripts/copy-fonts.mjs`](scripts/copy-fonts.mjs) copies them from Fontsource into `public/fonts`.
+
+The theme is stored in the browser, not the book, and a small script in `layout.tsx` applies it before the first paint.
 
 ### Phones
 
-Below 768 px, the toolbar is fixed to the bottom edge. Android resizes the page for the keyboard, thanks to `interactive-widget=resizes-content`. iOS draws the keyboard over the page instead, so [`useKeyboardOffset.ts`](src/components/editor/useKeyboardOffset.ts) reads the `visualViewport` API and lifts the toolbar by hand.
+Below 768 px, the toolbar moves to the bottom edge, above the keyboard, and scrolls sideways so its buttons stay a size a thumb can hit. On iOS, [`useKeyboardOffset.ts`](src/components/editor/useKeyboardOffset.ts) lifts it above the keyboard using the `visualViewport` API. The preview and the Contents panel cover the page; Esc closes them, and a tap outside closes the Contents panel.
+
+<p>
+  <img src="docs/screenshots/07-phone.png" width="300" alt="The editor on a phone, with the status bar and the toolbar at the bottom">
+</p>
 
 ## Project structure
 
 ```text
 src/
-├── app/
-│   ├── layout.tsx             viewport settings and the theme script
-│   ├── page.tsx               the page
-│   └── globals.css            colors for each theme
-├── components/editor/
-│   ├── BookEditor.tsx         loads the draft; the main screen; export
-│   ├── EditorLoader.tsx       browser-only loading
-│   ├── Toolbar.tsx            formatting buttons
-│   ├── Contents.tsx           the Contents panel
-│   ├── ThemePicker.tsx        Light / Dark / Sepia
-│   ├── BookImage.tsx          the image node and its view
-│   ├── useAutosave.ts         saving
-│   ├── useImages.ts           file, paste and drop handling
-│   ├── useKeyboardOffset.ts   toolbar above the iOS keyboard
-│   ├── useNotice.ts           temporary status messages
-│   └── editor.css             editor styles
+├── app/                       pages, layout and theme colours
+├── components/
+│   ├── books/                 the book list
+│   └── editor/
+│       ├── BookEditor.tsx     loads a book; the main screen
+│       ├── Toolbar.tsx        formatting, dividers, footnotes, images
+│       ├── Contents.tsx       the left panel
+│       ├── PageForms.tsx      Title page and Copyright forms
+│       ├── BookPreview.tsx    the device preview
+│       ├── Footnotes.tsx      the footnote box and the notes list
+│       ├── grammarCheck.ts    spelling and grammar underlines
+│       ├── GrammarPopup.tsx   the box for a mistake
+│       ├── suggestions.ts     import suggestions in the text
+│       ├── SettingsMenu.tsx   the cog menu
+│       ├── StatusBar.tsx      save status, counts, Export .docx
+│       └── TeamEpubCheck.tsx  Check EPUB (development only)
+├── import/                    Word file to document JSON
 └── lib/
     ├── schema.ts              what a document can contain
-    ├── paste.ts               pasted HTML cleanup
+    ├── footnote.ts            the footnote node
+    ├── subtitle.ts            the subtitle node
+    ├── dividers.ts            scene divider styles
     ├── drafts.ts              DraftStore and browser storage
-    ├── images.ts              image processing
-    ├── fonts.ts               available fonts and how they load
-    ├── headings.ts            heading list for the Contents panel
-    ├── theme.ts               themes and the early script
-    └── epub/
-        ├── index.ts           builds the EPUB
-        ├── chapters.ts        chapters and the table of contents
-        ├── serialize.ts       document JSON to XHTML
-        └── styles.ts          the book's stylesheet
+    ├── grammar/harper.ts      the spelling checker
+    ├── epub/                  chapters, EPUB, preview, book stylesheet
+    └── docx/                  the Word export
 scripts/
 ├── copy-fonts.mjs             copies fonts into public/fonts
-└── capture-docs.mjs           regenerates the sample and screenshots
+├── check-no-epub.mjs          keeps EPUB code out of production builds
+└── import-report.ts           import counts for a folder of Word files
 ```
 
-## Connecting the Ruby backend
+## Connecting a backend
 
-The editor only talks to the `DraftStore` interface in [`src/lib/drafts.ts`](src/lib/drafts.ts):
+The editor and the book list talk only to the `DraftStore` interface in [`src/lib/drafts.ts`](src/lib/drafts.ts):
 
 ```ts
 export interface DraftStore {
+  list(): Promise<Draft[]>;
   load(id: string): Promise<Draft | null>;
   save(draft: Draft): Promise<void>;
   loadImage(id: string): Promise<Blob | null>;
@@ -434,10 +413,11 @@ export interface DraftStore {
 }
 ```
 
-To store drafts on the server, implement it over your API and pass it in. No editor code changes. This sketch uses example endpoints:
+To store books on a server, implement it over your API and pass it in. No editor code changes. This sketch uses example endpoints:
 
 ```ts
-const railsDraftStore: DraftStore = {
+const serverDraftStore: DraftStore = {
+  list: async () => (await fetch("/api/drafts")).json(),
   load: async (id) => {
     const response = await fetch(`/api/drafts/${id}`);
     if (response.status === 404) return null;
@@ -463,78 +443,55 @@ const railsDraftStore: DraftStore = {
 };
 ```
 
-```tsx
-<BookEditor draftId={book.id} store={railsDraftStore} />
-```
-
-`load` must throw on a real failure instead of returning `null`. `null` means "no such draft" and starts a blank one, which the next autosave would save over the existing draft.
-
-On the Rails side, `content` can be stored as `jsonb` as it is. Images need an upload endpoint, and Active Storage would suit that. A real backend should also handle two tabs editing the same draft, which is last-save-wins today.
+`load` must throw on a real failure instead of returning `null`. `null` means "no such book", and the editor then shows a message instead of an empty book, so that no autosave can overwrite a book that couldn't be read. A server should also handle the same book open in two tabs, which is last-save-wins today.
 
 ## Extending the editor
 
-**Add a font:** add it to `scripts/copy-fonts.mjs`, run `node scripts/copy-fonts.mjs`, and add it to `FONTS` in [`src/lib/fonts.ts`](src/lib/fonts.ts).
-
-**Add a formatting option:** add the action to `GROUPS` in `Toolbar.tsx`.
-
-**Add a new kind of content:** add the extension to `src/lib/schema.ts` **and** a case to `serializeNode` in `src/lib/epub/serialize.ts`. Without that case, the node's own formatting is lost in the EPUB.
-
-**Regenerate the sample and screenshots:** this drives the real app in a temporary Chrome profile, so it can't touch your own draft.
-
-```bash
-npm run build
-npx next start -p 3200
-```
-
-Then, in a second terminal:
-
-```bash
-node scripts/capture-docs.mjs
-```
-
-Set `CHROME` if Chrome isn't in the default macOS location, and `APP_URL` if the app runs elsewhere.
+- **Add a kind of content:** add the extension to `src/lib/schema.ts` **and** a case to `serializeNode` in `src/lib/epub/serialize.ts` and to `blockParagraphs` in `src/lib/docx/index.ts`. Without those, the content's formatting is lost in the EPUB and the Word file.
+- **Add a font:** add it to `scripts/copy-fonts.mjs`, run `node scripts/copy-fonts.mjs`, and add it to `FONTS` in [`src/lib/fonts.ts`](src/lib/fonts.ts).
+- **Add a toolbar action:** add it to `GROUPS` in `Toolbar.tsx`.
+- **Add a preview device:** add it to [`previewDevices.ts`](src/components/editor/previewDevices.ts).
+- **Turn a spelling rule on or off:** edit `RULES_OFF` in [`harper.ts`](src/lib/grammar/harper.ts).
 
 ## Testing
 
-`npm test` runs 23 unit tests covering paste cleanup, the heading list, and the EPUB builder: file structure, formatting, chapters, table of contents links, metadata, images, fonts and escaping.
+`npm test` runs 289 unit tests. They cover the Word import (word for word, with footnotes, subtitles, scene breaks and suggestions), paste cleanup, the EPUB and its pages, the preview, the Word export and reading it back, footnotes, word counts, and the spelling check's behaviour.
 
-Beyond those, each feature was exercised in a real browser during development, and exported files were checked with EPUBCheck 5.2.1.
+Beyond those, each feature was exercised in headless Chrome during development:
 
-**Measured on an Apple Silicon Mac, with a 150,000-word book of about 20,000 paragraphs:**
+- importing, suggestions, footnotes, subtitles, dividers, the preview on all four devices, and the spelling check with the real Harper;
+- the page filler in headless Firefox, where every chapter started at the top of a page on all four devices;
+- the EPUB output with EPUBCheck 5.2.1, with no errors or warnings on a set of real manuscripts.
 
-| Operation             | Time           |
-| --------------------- | -------------- |
-| Pasting the whole book | About 4.5 s   |
-| Saving the draft      | About 0.2 s    |
-| Exporting the EPUB    | About 0.6 s    |
-| Editor work per keystroke | About 40 ms |
+**Measured in headless Chrome on an Apple Silicon Mac, with a 32,000-word book:**
 
-Typing cost grows with the number of paragraphs: it was about 27 ms at half that length. Expect slower numbers on a phone.
+| Operation                                 | Time         |
+| ----------------------------------------- | ------------ |
+| First spelling check of the whole book    | About 9 s, in the background |
+| Typing a letter while the check runs      | About 20 ms  |
 
 **Not verified yet:**
 
-- Real iPhones and Android phones. Phone layouts were tested in browser emulation, and the iOS keyboard handling with a simulated keyboard height.
-- Real pastes from Word, Google Docs and Pages. Paste handling was tested with HTML shaped like theirs.
-- Real e-readers and reading apps. EPUB output was validated with EPUBCheck and viewed in a browser.
-- Drag and drop of image files.
+- Safari.
+- Real iPhones and Android phones. Phone layouts were tested in browser emulation.
+- Real reading apps. The EPUB was validated with EPUBCheck and viewed in the preview.
 
 ## Known limits
 
-- **One draft per browser.** The code is keyed by draft id, but there is no library screen yet.
-- **Drafts stay on one device** until a backend is connected. Clearing browser data deletes them.
-- **No files can be opened.** Text comes in by typing or pasting.
-- **Very long books on phones** may feel slow, because ProseMirror's update cost grows with the number of top-level paragraphs. Editing one chapter at a time would solve it.
-- **Images fetched during paste** can fail, because many sites and apps don't allow it. The author is told when that happens.
-- **Removed images stay in browser storage** so that undo works. They aren't cleaned up yet.
-- **SVG isn't supported.** Formats a browser can't read, such as HEIC in Chrome, are refused with a message.
+- **Books stay on one device** until a backend is connected. Clearing browser data deletes them.
+- **The spelling check is English only,** and its first use downloads about 8 MB. If that download starts but never finishes, checking waits rather than giving up.
+- **Footnote notes aren't spell-checked;** only the main text is.
+- **EPUB output is for checking,** through **Check EPUB** in development. Production builds export `.docx` only.
 - **One author field.** Co-authors are saved as a single name.
-- **No cover image** in the EPUB yet.
-- **Readers may override the font.** That is normal for EPUB, and some ignore embedded fonts.
+- **No cover image** yet.
+- **SVG images aren't supported.** Formats a browser can't read, such as HEIC in Chrome, are refused with a message.
+- **Removed images stay in browser storage** so that undo works.
+- **Reading apps may override the font.** That is normal for EPUB.
 
 ## Licenses
 
-The five fonts are licensed under the [SIL Open Font License 1.1](https://openfontlicense.org), which allows embedding them in books. Each font's license is in its folder in `public/fonts/`.
-
-*The Rain Ledger* and its illustration are original sample content made for this project. Anna Sample is a fictional author.
+- The five fonts are licensed under the [SIL Open Font License 1.1](https://openfontlicense.org), which allows embedding them in books. Each font's license is in its folder in `public/fonts/`.
+- [Harper](https://github.com/automattic/harper) is licensed under Apache-2.0.
+- *The Rain Ledger*, its notes and its illustration are original sample content made for this project. Anna Sample is a fictional author.
 
 This project has no license of its own yet.
