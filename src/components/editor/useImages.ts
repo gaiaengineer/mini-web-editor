@@ -15,8 +15,9 @@ const count = (n: number) => (n === 1 ? "1 image" : `${n} images`);
 export function useImages(editor: Editor, store: DraftStore) {
   const [notice, setNotice] = useNotice();
   const importing = useRef(new Set<string>());
+  const adding = useRef(Promise.resolve());
 
-  const insertFiles = useCallback(
+  const addFiles = useCallback(
     async (files: File[], at?: number) => {
       setNotice(`Adding ${count(files.length)}…`, { persist: true });
       let failed = 0;
@@ -46,6 +47,18 @@ export function useImages(editor: Editor, store: DraftStore) {
     },
     [editor, store, setNotice],
   );
+
+  const insertFiles = useCallback(
+    (files: File[], at?: number) => {
+      const done = addFiles(files, at);
+      adding.current = Promise.all([adding.current, done]).then(() => {});
+      return done;
+    },
+    [addFiles],
+  );
+
+  // An image joins the book only after it's stored, so until then it's not unsaved work.
+  const imagesAdded = useCallback(() => adding.current, []);
 
   // Pasted HTML only carries an image's address. Copy each image in, so the book
   // doesn't depend on someone else's server. Sites that refuse the request can't
@@ -129,5 +142,5 @@ export function useImages(editor: Editor, store: DraftStore) {
     };
   }, [editor, insertFiles, importPending]);
 
-  return { insertFiles, imageNotice: notice };
+  return { insertFiles, imagesAdded, imageNotice: notice };
 }

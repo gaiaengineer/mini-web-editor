@@ -1,13 +1,32 @@
 import type { JSONContent } from "@tiptap/core";
 import { strToU8, zipSync, type Zippable } from "fflate";
-import { buildChapters, type TocEntry } from "./chapters";
-import { cleanText, escapeXml, imagePath, plainText } from "./serialize";
+import {
+  buildChapters,
+  contentsHeading,
+  guessLanguage,
+  hasContentsPage,
+  imageIds,
+  navList,
+  NOTES_FILE,
+  notesBody,
+  notesHeading,
+  withNotes,
+  withoutMissingImages,
+  type TocEntry,
+} from "./chapters";
+import { copyrightLines, type CopyrightDetails } from "@/lib/bookPages";
+import { bookFileName, cleanText, copyrightPageBody, escapeXml, imagePath, titlePageBody } from "./serialize";
 import { bookCss } from "./styles";
+
+export { imageIds };
 
 export type BookMeta = {
   bookId: string;
   title: string;
   author: string;
+  subtitle?: string;
+  copyright?: CopyrightDetails;
+  divider?: string;
   language?: string;
   modified?: Date;
 };
@@ -17,28 +36,6 @@ export type EpubFont = { css: string; files: { name: string; bytes: Uint8Array }
 export type EpubAssets = { images?: EpubImages; font?: EpubFont };
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
-
-export function imageIds(node: JSONContent): string[] {
-  if (node.type === "bookImage") return node.attrs?.assetId ? [node.attrs.assetId] : [];
-  return [...new Set((node.content ?? []).flatMap(imageIds))];
-}
-
-// A manifest entry or src pointing at a missing file makes the whole EPUB invalid.
-function withoutMissingImages(node: JSONContent, images: EpubImages): JSONContent {
-  if (!node.content) return node;
-  const content = node.content
-    .filter((child) => child.type !== "bookImage" || images.has(child.attrs?.assetId))
-    .map((child) => withoutMissingImages(child, images));
-  return { ...node, content };
-}
-
-function guessLanguage(doc: JSONContent) {
-  const sample = plainText(doc).slice(0, 5000);
-  const letters = sample.match(/\p{L}/gu)?.length ?? 0;
-  const cyrillic = sample.match(/\p{Script=Cyrillic}/gu)?.length ?? 0;
-  if (letters > 0 && cyrillic / letters > 0.5) return "ru";
-  return (typeof navigator !== "undefined" && navigator.language) || "en";
-}
 
 function page(title: string, language: string, body: string, extraNs = "") {
   return `${XML}
@@ -53,14 +50,6 @@ ${body}
 </body>
 </html>
 `;
-}
-
-function navList(entries: TocEntry[]): string {
-  const items = entries.map((entry) => {
-    const nested = entry.children.length ? navList(entry.children) : "";
-    return `<li><a href="${escapeXml(entry.href)}">${escapeXml(entry.title)}</a>${nested}</li>`;
-  });
-  return `<ol>${items.join("")}</ol>`;
 }
 
 // EPUB 2 readers, still common on older e-ink devices, need the NCX for a
@@ -97,27 +86,32 @@ export function buildEpub(
   const identifier = `urn:mini-web-editor:book:${meta.bookId}`;
   const modified = (meta.modified ?? new Date()).toISOString().replace(/\.\d+Z$/, "Z");
 
-  const { chapters, toc } = buildChapters(doc, title);
+  const { chapters, toc, contentsTitle, notes } = buildChapters(doc, title, { divider: meta.divider });
+  const menu = withNotes(toc, notes, language);
+  const EPUB_NS = ' xmlns:epub="http://www.idpf.org/2007/ops"';
 
   const titlePage = page(
     title,
     language,
-    `<div class="title-page"><h1>${escapeXml(title)}</h1>${author ? `<p>${escapeXml(author)}</p>` : ""}</div>`,
+    `<div class="title-page">${titlePageBody(title, cleanText(meta.subtitle ?? ""), author)}</div>`,
   );
 
-  const contents = language.startsWith("ru") ? "Содержание" : "Contents";
+  const copyright = copyrightLines(meta);
+  const copyrightPage = page(title, language, `<div class="copyright-page">${copyrightPageBody(copyright)}</div>`);
+
   const nav = page(
     title,
     language,
-    `<nav epub:type="toc" id="toc"><h1>${contents}</h1>${navList(toc)}</nav>`,
-    ' xmlns:epub="http://www.idpf.org/2007/ops"',
+    `<nav epub:type="toc" id="toc"><h1>${escapeXml(contentsHeading(contentsTitle, language))}</h1>${navList(menu)}</nav>`,
+    EPUB_NS,
   );
 
   const usedImages = imageIds(doc).map((id) => ({ id, ...images.get(id)! }));
 
   // The nav file also powers the reader's own contents menu. Listing it in the spine
   // makes it a page of the book too, unless there is nothing worth a page.
-  const hasContentsPage = toc.length > 1 || toc.some((entry) => entry.children.length > 0);
+  const contentsItem = hasContentsPage(toc) ? '<itemref idref="nav"/>' : "";
+  const chapterItem = (_: unknown, i: number) => `<itemref idref="c${i + 1}"/>`;
 
   const opf = `${XML}
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" xml:lang="${language}">
@@ -134,13 +128,16 @@ ${author ? `<dc:creator id="creator">${escapeXml(author)}</dc:creator>\n<meta re
 <item id="css" href="book.css" media-type="text/css"/>
 ${font?.files.map(({ name }, i) => `<item id="font${i + 1}" href="fonts/${name}" media-type="font/woff2"/>`).join("\n") ?? ""}
 <item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>
+${copyright.length ? '<item id="copyright" href="copyright.xhtml" media-type="application/xhtml+xml"/>' : ""}
 ${chapters.map((c, i) => `<item id="c${i + 1}" href="${c.file}" media-type="application/xhtml+xml"/>`).join("\n")}
+${notes.length ? `<item id="notes" href="${NOTES_FILE}" media-type="application/xhtml+xml"/>` : ""}
 ${usedImages.map(({ id, type }, i) => `<item id="img${i + 1}" href="${imagePath(id, type)}" media-type="${type}"/>`).join("\n")}
 </manifest>
 <spine toc="ncx">
 <itemref idref="title"/>
-${hasContentsPage ? '<itemref idref="nav"/>' : ""}
-${chapters.map((_, i) => `<itemref idref="c${i + 1}"/>`).join("\n")}
+${copyright.length ? '<itemref idref="copyright"/>' : ""}
+${[contentsItem, ...chapters.map(chapterItem)].join("\n")}
+${notes.length ? '<itemref idref="notes"/>' : ""}
 </spine>
 </package>
 `;
@@ -157,12 +154,16 @@ ${chapters.map((_, i) => `<itemref idref="c${i + 1}"/>`).join("\n")}
     "META-INF/container.xml": strToU8(container),
     "EPUB/content.opf": strToU8(opf),
     "EPUB/nav.xhtml": strToU8(nav),
-    "EPUB/toc.ncx": strToU8(ncx(toc, identifier, title, author)),
+    "EPUB/toc.ncx": strToU8(ncx(menu, identifier, title, author)),
     "EPUB/book.css": strToU8((font?.css ?? "") + bookCss),
     "EPUB/title.xhtml": strToU8(titlePage),
+    ...(copyright.length ? { "EPUB/copyright.xhtml": strToU8(copyrightPage) } : {}),
   };
   for (const chapter of chapters) {
-    files[`EPUB/${chapter.file}`] = strToU8(page(chapter.title, language, chapter.body));
+    files[`EPUB/${chapter.file}`] = strToU8(page(chapter.title, language, chapter.body, EPUB_NS));
+  }
+  if (notes.length) {
+    files[`EPUB/${NOTES_FILE}`] = strToU8(page(notesHeading(language), language, notesBody(notes, language), EPUB_NS));
   }
   // Fonts and images are already compressed; deflating them again only costs time.
   for (const { name, bytes } of font?.files ?? []) {
@@ -174,7 +175,4 @@ ${chapters.map((_, i) => `<itemref idref="c${i + 1}"/>`).join("\n")}
   return zipSync(files, { level: 9 });
 }
 
-export function epubFileName(title: string) {
-  const safe = title.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").slice(0, 100);
-  return `${safe || "Untitled"}.epub`;
-}
+export const epubFileName = (title: string) => bookFileName(title, "epub");

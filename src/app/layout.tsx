@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Mini Web Editor",
-  description: "Write your book in the browser and export it as an EPUB.",
+  description: "Turn a manuscript into a finished book.",
 };
 
 export const viewport: Viewport = {

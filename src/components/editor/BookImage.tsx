@@ -2,18 +2,7 @@ import { mergeAttributes, Node } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import type { DraftStore } from "@/lib/drafts";
-
-// Kept for the whole session: undo and drag recreate the view of the same image.
-const urls = new Map<string, Promise<string | null>>();
-
-function imageUrl(store: DraftStore, id: string) {
-  let url = urls.get(id);
-  if (!url) {
-    url = store.loadImage(id).then((blob) => blob && URL.createObjectURL(blob));
-    urls.set(id, url);
-  }
-  return url;
-}
+import { imageUrl } from "./imageUrl";
 
 function ImageView({ node, editor, extension, selected, updateAttributes, deleteNode }: ReactNodeViewProps) {
   const { assetId, pendingSrc, alt, width, height, textAlign } = node.attrs;

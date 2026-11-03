@@ -1,5 +1,6 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { listHeadings, type Heading } from "@/lib/headings";
 
 const REFRESH_MS = 250;
@@ -7,12 +8,22 @@ const OVERLAY = "(max-width: 1099px)";
 
 const sameHeadings = (a: Heading[], b: Heading[]) => JSON.stringify(a) === JSON.stringify(b);
 
+export type BookView = "text" | "title" | "copyright";
+
+const PAGES = [
+  { id: "title", label: "Title page" },
+  { id: "copyright", label: "Copyright" },
+  { id: "text", label: "Book text" },
+] as const;
+
 type Props = {
   editor: Editor;
+  view: BookView;
+  onShowPage: (view: BookView) => void;
   onClose: () => void;
 };
 
-export function Contents({ editor, onClose }: Props) {
+export function Contents({ editor, view, onShowPage, onClose }: Props) {
   const [headings, setHeadings] = useState(() => listHeadings(editor.state.doc));
 
   // Not on every keystroke: in a long book that means re-walking the document.
@@ -57,10 +68,17 @@ export function Contents({ editor, onClose }: Props) {
     // Positions in the list can be a moment old, so look them up again.
     const heading = listHeadings(editor.state.doc)[index];
     if (!heading) return;
+    flushSync(() => onShowPage("text"));
     editor.commands.setTextSelection(heading.pos + 1);
     (editor.view.nodeDOM(heading.pos) as HTMLElement | null)?.scrollIntoView({ block: "start" });
     // On a phone, focusing would open the keyboard over the chapter just opened.
     if (!matchMedia("(pointer: coarse)").matches) editor.view.focus();
+    if (matchMedia(OVERLAY).matches) onClose();
+  };
+
+  // In a narrow window this panel covers whatever was just chosen.
+  const leaveFor = (choose: () => void) => {
+    choose();
     if (matchMedia(OVERLAY).matches) onClose();
   };
 
@@ -76,6 +94,15 @@ export function Contents({ editor, onClose }: Props) {
             ×
           </button>
         </div>
+        <ol className="contents-pages">
+          {PAGES.map(({ id, label }) => (
+            <li key={id}>
+              <button type="button" aria-current={view === id ? "page" : undefined} onClick={() => leaveFor(() => onShowPage(id))}>
+                {label}
+              </button>
+            </li>
+          ))}
+        </ol>
         {headings.length === 0 ? (
           <p className="contents-empty">
             Mark a line as H1, H2 or H3 and it will appear here. Each top-level heading starts a
@@ -88,7 +115,7 @@ export function Contents({ editor, onClose }: Props) {
                 <button
                   type="button"
                   data-depth={heading.level - topLevel}
-                  aria-current={index === current ? "location" : undefined}
+                  aria-current={view === "text" && index === current ? "location" : undefined}
                   onClick={() => goTo(index)}
                 >
                   {heading.title}

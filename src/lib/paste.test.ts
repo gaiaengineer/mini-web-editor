@@ -23,6 +23,9 @@ describe("cleanPastedHtml", () => {
   it("maps headings the editor has no level for", () => {
     expect(cleanPastedHtml("<h5>x</h5>")).toBe("<h3>x</h3>");
     expect(cleanPastedHtml('<p class="MsoTitle">x</p>')).toContain("<h1");
-    expect(cleanPastedHtml('<p class="MsoSubtitle">x</p>')).toContain("<h2");
+  });
+
+  it("keeps a line in Word's Subtitle style as a subtitle, not a heading", () => {
+    expect(cleanPastedHtml('<p class="MsoSubtitle">x</p>')).toContain("data-subtitle");
   });
 });

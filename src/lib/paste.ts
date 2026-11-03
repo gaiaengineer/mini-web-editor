@@ -60,7 +60,7 @@ function normalizeAlignment(doc: Document) {
 function normalizeHeadings(doc: Document) {
   for (const el of doc.body.querySelectorAll("h4,h5,h6")) rename(el, "h3");
   for (const el of doc.body.querySelectorAll(".MsoTitle")) rename(el, "h1");
-  for (const el of doc.body.querySelectorAll(".MsoSubtitle")) rename(el, "h2");
+  for (const el of doc.body.querySelectorAll(".MsoSubtitle")) rename(el, "p").setAttribute("data-subtitle", "");
 }
 
 export function cleanPastedHtml(html: string) {

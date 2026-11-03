@@ -1,5 +1,6 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useRef, type ReactNode } from "react";
+import { focusNextNote } from "./Footnotes";
 import { useKeyboardOffset } from "./useKeyboardOffset";
 
 type ChainFn = ReturnType<Editor["chain"]>;
@@ -76,7 +77,18 @@ const GROUPS: Action[][] = [
       run: (chain) => chain.setTextAlign("right"),
     },
   ],
-  [heading(1), heading(2), heading(3)],
+  [
+    heading(1),
+    heading(2),
+    heading(3),
+    {
+      label: "Chapter subtitle",
+      shortcut: "Mod+Alt+4",
+      icon: <span className="tool-text">Sub</span>,
+      isActive: (editor) => editor.isActive("subtitle"),
+      run: (chain) => chain.toggleNode("subtitle", "paragraph"),
+    },
+  ],
 ];
 
 const ACTIONS = GROUPS.flat();
@@ -93,6 +105,21 @@ const imageIcon = (
     <rect x="2" y="3" width="14" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
     <circle cx="6.2" cy="7" r="1.3" fill="currentColor" />
     <path d="M3 13.5l4-3.5 2.5 2 3-3 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+  </svg>
+);
+
+const dividerIcon = (
+  <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+    <circle cx="4" cy="9" r="1.5" fill="currentColor" />
+    <circle cx="9" cy="9" r="1.5" fill="currentColor" />
+    <circle cx="14" cy="9" r="1.5" fill="currentColor" />
+  </svg>
+);
+
+const footnoteIcon = (
+  <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+    <path d="M2.5 14.5 6 4.5l3.5 10M3.8 11h4.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12.5 4.2 14.3 3v5.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -165,7 +192,30 @@ export function Toolbar({ editor, onImages, contentsOpen, onToggleContents }: Pr
           })}
         </div>
       ))}
-      <div className="toolbar-group toolbar-single">
+      <div className="toolbar-group">
+        <button
+          type="button"
+          className="tool"
+          aria-label="Add divider"
+          title="Add divider (a scene break). Click a divider to select it, then Delete removes it."
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).setHorizontalRule().run()}
+        >
+          {dividerIcon}
+        </button>
+        <button
+          type="button"
+          className="tool"
+          aria-label="Add footnote"
+          title="Add footnote. Click a footnote's number to edit or delete it."
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            focusNextNote(editor);
+            editor.chain().focus(undefined, { scrollIntoView: false }).addFootnote().run();
+          }}
+        >
+          {footnoteIcon}
+        </button>
         <button
           type="button"
           className="tool"

@@ -6,7 +6,7 @@ export const THEMES = [
 
 export type Theme = (typeof THEMES)[number]["id"];
 
-export const THEME_KEY = "written-editor-theme";
+export const THEME_KEY = "mini-web-editor-theme";
 
 // Runs before the first paint, so a dark or sepia page never flashes white.
 // Until an author chooses, the theme follows their device.

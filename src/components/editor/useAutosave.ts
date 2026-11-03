@@ -12,26 +12,36 @@ export function useAutosave(store: DraftStore, getDraft: () => Draft) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const inFlight = useRef<Promise<void>>(Promise.resolve());
 
+  // Another flush can start a save during the wait, so wait until none is left.
+  const saveInProgress = useCallback(async () => {
+    let waitedFor;
+    do {
+      waitedFor = inFlight.current;
+      await waitedFor;
+    } while (waitedFor !== inFlight.current);
+  }, []);
+
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
     timer.current = undefined;
-    await inFlight.current;
-    if (!dirty.current) return;
-
-    dirty.current = false;
-    setStatus("saving");
-    inFlight.current = store
-      .save({ ...getDraft(), updatedAt: new Date().toISOString() })
-      .then(() => {
-        setStatus(dirty.current ? "dirty" : "saved");
-        setSavedAt(new Date());
-      })
-      .catch(() => {
-        dirty.current = true;
-        setStatus("error");
-      });
-    await inFlight.current;
-  }, [store, getDraft]);
+    await saveInProgress();
+    if (dirty.current) {
+      dirty.current = false;
+      setStatus("saving");
+      inFlight.current = store
+        .save({ ...getDraft(), updatedAt: new Date().toISOString() })
+        .then(() => {
+          setStatus(dirty.current ? "dirty" : "saved");
+          setSavedAt(new Date());
+        })
+        .catch(() => {
+          dirty.current = true;
+          setStatus("error");
+        });
+    }
+    await saveInProgress();
+    return !dirty.current;
+  }, [store, getDraft, saveInProgress]);
 
   // The timer is not reset on each keystroke, so that an author who types
   // without pausing still gets saved every couple of seconds.
@@ -62,5 +72,5 @@ export function useAutosave(store: DraftStore, getDraft: () => Draft) {
     };
   }, [flush]);
 
-  return { status, savedAt, markDirty, saveNow };
+  return { status, savedAt, markDirty, saveNow, flush };
 }

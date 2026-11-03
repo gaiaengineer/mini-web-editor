@@ -1,27 +1,42 @@
 "use client";
 
 import { EditorContent, useEditor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import type { EpubImages } from "@/lib/epub";
-import { localDraftStore, newDraft, type Draft, type DraftStore } from "@/lib/drafts";
-import { editorFontCss, fontById, fontStack, FONTS, loadEpubFont } from "@/lib/fonts";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { dividerById } from "@/lib/dividers";
+import { localDraftStore, type Draft, type DraftStore } from "@/lib/drafts";
+import { editorFontCss, fontById, fontStack } from "@/lib/fonts";
 import { cleanPastedHtml, keepPastedAlignment } from "@/lib/paste";
 import { createExtensions } from "@/lib/schema";
-import { Contents } from "./Contents";
-import { ThemePicker } from "./ThemePicker";
+// Production builds replace this with nothing. See next.config.ts.
+import TeamEpubCheck from "@/components/editor/TeamEpubCheck";
+import { BookPreview, type PreviewJump, type PreviewPlace } from "./BookPreview";
+import { Contents, type BookView } from "./Contents";
+import { FootnoteEditor, FootnoteList } from "./Footnotes";
+import { GrammarCheck, type OpenMistake } from "./grammarCheck";
+import { GrammarPopup } from "./GrammarPopup";
+import { GrammarSettings } from "./grammarSettings";
+import { NoticeList } from "./NoticeList";
+import { CopyrightForm, TitlePageForm, type EditablePages } from "./PageForms";
+import { PREVIEW_DEVICES } from "./previewDevices";
 import { Toolbar } from "./Toolbar";
+import { SettingsMenu } from "./SettingsMenu";
+import { StatusBar } from "./StatusBar";
+import { SuggestionMarks } from "./suggestions";
+import { SuggestionReview } from "./SuggestionReview";
 import { useAutosave, type SaveStatus } from "./useAutosave";
 import { useImages } from "./useImages";
 import { useNotice } from "./useNotice";
+import { WordDownload } from "./WordDownload";
 import "./editor.css";
 
 type Props = {
-  draftId?: string;
+  draftId: string;
   store?: DraftStore;
 };
 
-export default function BookEditor({ draftId = "default", store = localDraftStore }: Props) {
+export default function BookEditor({ draftId, store = localDraftStore }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [missing, setMissing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -30,7 +45,9 @@ export default function BookEditor({ draftId = "default", store = localDraftStor
     store
       .load(draftId)
       .then((saved) => {
-        if (!cancelled) setDraft(saved ?? newDraft(draftId));
+        if (cancelled) return;
+        setDraft(saved);
+        setMissing(!saved);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -58,6 +75,14 @@ export default function BookEditor({ draftId = "default", store = localDraftStor
       </p>
     );
   }
+  // Never start a blank book here either, for the same reason.
+  if (missing) {
+    return (
+      <p className="load-error" role="alert">
+        This book isn’t in this browser. <a href="/">All books</a>
+      </p>
+    );
+  }
   if (!draft) return null;
   return <Workspace key={draft.id} initial={draft} store={store} />;
 }
@@ -77,30 +102,37 @@ function statusText(status: SaveStatus, savedAt: Date | null) {
   }
 }
 
-function downloadFile(bytes: Uint8Array<ArrayBuffer>, name: string) {
-  const url = URL.createObjectURL(new Blob([bytes], { type: "application/epub+zip" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
 function Workspace({ initial, store }: { initial: Draft; store: DraftStore }) {
-  const titleRef = useRef<HTMLInputElement>(null);
-  const authorRef = useRef<HTMLInputElement>(null);
-  const fontRef = useRef<HTMLSelectElement>(null);
+  const [pages, setPages] = useState<EditablePages>({
+    title: initial.title,
+    author: initial.author,
+    subtitle: initial.subtitle,
+    copyright: initial.copyright,
+  });
+  const pagesRef = useRef(pages);
+  const [view, setView] = useState<BookView>("text");
+  const [previewJump, setPreviewJump] = useState<PreviewJump | null>(null);
+  const clearPreviewJump = useCallback(() => setPreviewJump(null), []);
+  const fontId = useRef(initial.font);
   const [font, setFont] = useState(() => fontById(initial.font));
+  const dividerId = useRef(dividerById(initial.divider).id);
+  const [divider, setDivider] = useState(() => dividerById(initial.divider).id);
+  const [grammar] = useState(() => new GrammarSettings(initial));
+  const [check, setCheck] = useState(grammar.check);
   // Open where it fits beside the text; elsewhere it covers the page, so it waits to be asked.
   const [contentsOpen, setContentsOpen] = useState(() => matchMedia("(min-width: 1100px)").matches);
   const closeContents = useCallback(() => setContentsOpen(false), []);
-  const [exporting, setExporting] = useState(false);
-  const [exportNotice, setExportNotice] = useNotice();
+  const [notices, setNotices] = useState(initial.notices);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const closePreview = useCallback(() => setPreviewOpen(false), []);
+  const [previewPlace, setPreviewPlace] = useState<PreviewPlace>({ deviceId: PREVIEW_DEVICES[0].id, position: 0 });
+  const noticesRef = useRef(initial.notices);
+  const [outputNotice, setOutputNotice] = useNotice();
 
   const editor = useEditor({
     // Safe because this component never renders on the server (see EditorLoader).
     immediatelyRender: true,
-    extensions: createExtensions(store),
+    extensions: [...createExtensions(store), SuggestionMarks, GrammarCheck.configure({ checker: () => grammar.checker() })],
     content: initial.content,
     editorProps: {
       transformPastedHTML: cleanPastedHtml,
@@ -114,16 +146,18 @@ function Workspace({ initial, store }: { initial: Draft; store: DraftStore }) {
   const getDraft = useCallback(
     (): Draft => ({
       ...initial,
-      title: titleRef.current?.value ?? initial.title,
-      author: authorRef.current?.value ?? initial.author,
-      font: fontRef.current?.value ?? initial.font,
+      ...pagesRef.current,
+      font: fontId.current,
+      divider: dividerId.current,
+      ...grammar.saved(),
       content: editor.getJSON(),
+      notices: noticesRef.current,
     }),
-    [editor, initial],
+    [editor, initial, grammar],
   );
 
-  const { status, savedAt, markDirty, saveNow } = useAutosave(store, getDraft);
-  const { insertFiles, imageNotice } = useImages(editor, store);
+  const { status, savedAt, markDirty, saveNow, flush } = useAutosave(store, getDraft);
+  const { insertFiles, imagesAdded, imageNotice } = useImages(editor, store);
 
   useEffect(() => {
     editor.on("update", markDirty);
@@ -143,119 +177,166 @@ function Workspace({ initial, store }: { initial: Draft; store: DraftStore }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [saveNow]);
 
-  const exportEpub = async () => {
-    setExporting(true);
-    setExportNotice(null);
-    try {
-      const draft = getDraft();
-      // Loaded on demand, so authors only download the zip code when they export.
-      const { buildEpub, epubFileName, imageIds } = await import("@/lib/epub");
+  const changePages = (change: Partial<EditablePages>) => {
+    pagesRef.current = { ...pagesRef.current, ...change };
+    setPages(pagesRef.current);
+    markDirty();
+  };
 
-      const ids = imageIds(draft.content);
-      const images: EpubImages = new Map();
-      for (const id of ids) {
-        const blob = await store.loadImage(id);
-        if (blob) images.set(id, { bytes: new Uint8Array(await blob.arrayBuffer()), type: blob.type });
-      }
+  // The preview follows where the author is, if there's room for it beside them.
+  const showInPreview = (page: string, open: boolean) => {
+    if (open) setPreviewOpen(true);
+    if (open || previewOpen) setPreviewJump((jump) => ({ page, count: (jump?.count ?? 0) + 1 }));
+  };
 
-      const chosenFont = fontById(draft.font);
-      const epubFont =
-        chosenFont &&
-        (await loadEpubFont(chosenFont, `${draft.title} ${draft.author} ${editor.getText()}`));
-
-      downloadFile(
-        buildEpub(draft.content, draft, { images, font: epubFont }) as Uint8Array<ArrayBuffer>,
-        epubFileName(draft.title),
-      );
-      const missing = ids.length - images.size;
-      const absent = [!draft.title.trim() && "a title", !draft.author.trim() && "an author"];
-      if (missing) {
-        setExportNotice(`Exported without ${missing} missing image${missing > 1 ? "s" : ""}`);
-      } else if (absent.some(Boolean)) {
-        setExportNotice(`Exported without ${absent.filter(Boolean).join(" or ")}`);
-      }
-    } catch (error) {
-      console.error(error);
-      setExportNotice("Export failed. Try again");
-    } finally {
-      setExporting(false);
+  const showPage = (next: BookView) => {
+    setView(next);
+    if (next === "text") {
+      editor.commands.focus();
+      return;
     }
+    showInPreview(`${next}-page`, matchMedia("(min-width: 1100px)").matches);
+  };
+
+  const changeFont = (id: string) => {
+    fontId.current = id;
+    setFont(fontById(id));
+    markDirty();
+  };
+
+  const changeDivider = (id: string) => {
+    dividerId.current = dividerById(id).id;
+    setDivider(dividerId.current);
+    markDirty();
+  };
+
+  // The browser's own spell check would mark the same words a second time, and
+  // knows nothing of the book's dictionary. It stays on when this check is off.
+  useEffect(() => {
+    editor.view.dom.setAttribute("spellcheck", grammar.checker() ? "false" : "true");
+  }, [editor, grammar, check]);
+
+  const changeCheck = (value: string) => {
+    grammar.setCheck(value);
+    setCheck(grammar.check);
+    editor.commands.recheckBook();
+    markDirty();
+  };
+
+  const ignoreMistake = async (open: OpenMistake) => {
+    const checker = grammar.checker();
+    if (!checker) return;
+    grammar.setIgnored(await checker.ignore(open.text, open.mistake));
+    editor.commands.recheckLines((text) => text === open.text);
+    markDirty();
+  };
+
+  const addWord = (word: string) => {
+    grammar.addWord(word);
+    editor.commands.recheckLines((text) => text.includes(word));
+    markDirty();
+  };
+
+  const dismissNotices = () => {
+    noticesRef.current = [];
+    setNotices([]);
+    markDirty();
+  };
+
+  const leave = async (event: MouseEvent) => {
+    event.preventDefault();
+    await imagesAdded();
+    // A full page load, so the warning about unsaved changes covers leaving this page.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (await flush()) location.href = "/";
   };
 
   return (
     <div className="editor-page">
       <header className="topbar">
+        {/* Its buttons act on the text, which a form is covering. */}
+        <div className="toolbar-holder" inert={view !== "text"}>
         <Toolbar
           editor={editor}
           onImages={(files) => void insertFiles(files)}
           contentsOpen={contentsOpen}
           onToggleContents={() => setContentsOpen((open) => !open)}
         />
+        </div>
         <div className="topbar-actions">
-          <span className={`save-status ${status === "error" ? "is-error" : ""}`} role="status">
-            {imageNotice ?? exportNotice ?? statusText(status, savedAt)}
-          </span>
-          <ThemePicker />
+          <a className="action" href="/" onClick={leave}>
+            All books
+          </a>
           <button type="button" className="action" onClick={() => void saveNow()}>
             Save draft
           </button>
           <button
             type="button"
-            className="action action-primary"
-            onClick={() => void exportEpub()}
-            disabled={exporting}
+            className="action"
+            aria-pressed={previewOpen}
+            onClick={() => setPreviewOpen((open) => !open)}
           >
-            Export EPUB
+            Preview
           </button>
+          <TeamEpubCheck getDraft={getDraft} store={store} onNotice={setOutputNotice} />
+          <SettingsMenu
+            font={font}
+            onFontChange={changeFont}
+            divider={divider}
+            onDividerChange={changeDivider}
+            check={check}
+            checkAvailable={grammar.english}
+            onCheckChange={changeCheck}
+          />
         </div>
       </header>
 
       <div className="editor-body">
-        {contentsOpen && <Contents editor={editor} onClose={closeContents} />}
-        <main className="sheet" style={{ "--book-font": font && fontStack(font) } as CSSProperties}>
-          {font && <style>{editorFontCss(font)}</style>}
-          <input
-            ref={titleRef}
-            className="book-title"
-            defaultValue={initial.title}
-            placeholder="Book title"
-            aria-label="Book title"
-            onChange={markDirty}
+        {contentsOpen && (
+          <Contents
+            editor={editor}
+            view={view}
+            onShowPage={showPage}
+            onClose={closeContents}
           />
-          <div className="book-meta">
-            <input
-              ref={authorRef}
-              className="book-author"
-              defaultValue={initial.author}
-              placeholder="Author"
-              aria-label="Author"
-              onChange={markDirty}
-            />
-            <select
-              ref={fontRef}
-              className="book-font"
-              aria-label="Book font"
-              defaultValue={font?.id ?? ""}
-              onChange={(event) => {
-                setFont(fontById(event.target.value));
-                markDirty();
-              }}
-            >
-              <option value="">Default font</option>
-              {(["Serif", "Sans-serif"] as const).map((group) => (
-                <optgroup key={group} label={group}>
-                  {FONTS.filter((option) => option.group === group).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+        )}
+        <main className="sheet" data-divider={divider} style={{ "--book-font": font && fontStack(font) } as CSSProperties}>
+          {font && <style>{editorFontCss(font)}</style>}
+          {view === "title" && <TitlePageForm pages={pages} onChange={changePages} />}
+          {view === "copyright" && <CopyrightForm pages={pages} onChange={changePages} />}
+          <div hidden={view !== "text"}>
+            {notices && notices.length > 0 && <NoticeList notices={notices} onDismiss={dismissNotices} />}
+          <SuggestionReview editor={editor} />
+            <div className="text-area">
+              <EditorContent editor={editor} />
+              <FootnoteEditor editor={editor} />
+              <GrammarPopup editor={editor} onIgnore={(open) => void ignoreMistake(open)} onAddWord={addWord} />
+            </div>
+            <FootnoteList editor={editor} />
           </div>
-          <EditorContent editor={editor} />
         </main>
+        {previewOpen && (
+          <BookPreview
+            getDraft={getDraft}
+            savedAt={savedAt}
+            store={store}
+            place={previewPlace}
+            jump={previewJump}
+            onJumpDone={clearPreviewJump}
+            onPlaceChange={setPreviewPlace}
+            onSave={() => void saveNow()}
+            onClose={closePreview}
+          />
+        )}
       </div>
+
+      <StatusBar
+        editor={editor}
+        status={imageNotice ?? outputNotice ?? statusText(status, savedAt)}
+        isError={status === "error"}
+      >
+        <WordDownload getDraft={getDraft} store={store} onNotice={setOutputNotice} />
+      </StatusBar>
     </div>
   );
 }

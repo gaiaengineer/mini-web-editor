@@ -1,5 +1,5 @@
-import EditorLoader from "@/components/editor/EditorLoader";
+import BookList from "@/components/books/BookList";
 
 export default function Home() {
-  return <EditorLoader />;
+  return <BookList />;
 }
